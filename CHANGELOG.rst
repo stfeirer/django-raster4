@@ -1,6 +1,21 @@
 django-raster change log
 ========================
 
+unreleased
+----------
+* Band histograms are now binned over the band's actual min/max instead of
+  being snapped outward to whole numbers. Bands whose values sit inside a
+  single integer interval -- fractions, ratios, indices, probabilities --
+  previously had their histogram flattened into a handful of buckets, or into
+  a single bucket for narrow ranges. Affects newly parsed layers only;
+  re-parse existing ones to rebuild their histograms.
+* Added ``raster.apps.RasterConfig`` pinning ``default_auto_field`` to
+  ``AutoField``. Without it a project set to ``BigAutoField`` (the
+  ``startproject`` default since Django 3.2) makes ``makemigrations`` try to
+  write ``AlterField`` migrations for eight django-raster models into the
+  installed package. No schema change: ``AutoField`` is what the existing
+  migrations already create.
+
 0.8
 ---
 * Django 3.0 compatability.

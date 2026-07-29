@@ -330,12 +330,46 @@ class RasterLayerBandMetadata(models.Model):
     def __str__(self):
         return '{} - Min {} - Max {}'.format(self.rasterlayer.name, self.min, self.max)
 
+    def histogram_range(self):
+        """
+        The (low, high) range the histogram bins should span.
+
+        Uses the band's actual min/max. This used to snap the range outward to
+        whole numbers with math.floor/math.ceil, which silently destroyed the
+        histogram for any band whose values sit inside a single integer
+        interval -- exactly the common case for fractions, ratios, indices and
+        probabilities.
+
+        A band spanning 0.003 to 0.24, for example, became a 0-1 range binned
+        at 0.01, so all of its data fell into 24 of the 100 buckets and every
+        bin edge was a multiple of 0.01. Quantile breaks computed from those
+        edges came out with duplicates, producing empty classes. A band
+        spanning 0.001 to 0.005 collapsed into a single bucket entirely.
+
+        Integer-valued bands are unaffected: floor/ceil were no-ops for them.
+        """
+        low = float(self.min)
+        high = float(self.max)
+
+        if not (math.isfinite(low) and math.isfinite(high)):
+            # Degenerate metadata; fall back to a unit range so numpy does not
+            # raise and the row can still be stored.
+            return 0.0, 1.0
+
+        if low == high:
+            # A constant band. numpy would pick its own arbitrary padding, so
+            # be explicit and keep the bins symmetric around the value.
+            pad = abs(low) * 1e-6 or 1e-6
+            return low - pad, high + pad
+
+        return low, high
+
     def save(self, *args, **kwargs):
         if not self.pk:
             # Construct empty histogram
             hist = numpy.histogram(
                 [],
-                range=(math.floor(self.min), math.ceil(self.max)),
+                range=self.histogram_range(),
                 bins=self.HISTOGRAM_BINS
             )
             # Set empty histogram values
